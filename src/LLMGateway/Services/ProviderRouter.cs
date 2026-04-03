@@ -1,6 +1,6 @@
-using System.Text.Json;
 using LLMGateway.Configuration;
-using LLMGateway.Data;
+using LLMGateway.Data.Entities;
+using LLMGateway.Data.Repositories;
 
 namespace LLMGateway.Services;
 
@@ -29,8 +29,7 @@ public class ProviderRouter : IProviderRouter
         foreach (var provider in providers)
         {
             if (!provider.IsEnabled) continue;
-            var models = JsonSerializer.Deserialize(provider.ModelsJson, AppJsonSerializerContext.Default.ListString) ?? [];
-            foreach (var model in models)
+            foreach (var model in provider.Models)
                 result.Add((model, provider.Name));
         }
         return result;
@@ -38,13 +37,12 @@ public class ProviderRouter : IProviderRouter
 
     private static ProviderOptions MapToOptions(ProviderEntity entity)
     {
-        var models = JsonSerializer.Deserialize(entity.ModelsJson, AppJsonSerializerContext.Default.ListString) ?? [];
         return new ProviderOptions
         {
             Name = entity.Name,
             BaseUrl = entity.BaseUrl,
             ApiKey = entity.ApiKey,
-            Models = models
+            Models = entity.Models
         };
     }
 }

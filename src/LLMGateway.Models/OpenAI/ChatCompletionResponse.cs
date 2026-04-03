@@ -2,9 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace LLMGateway.Models.OpenAI;
 
-/// <summary>
-/// OpenAI chat completions response body.
-/// </summary>
 public class ChatCompletionResponse
 {
     [JsonPropertyName("id")]

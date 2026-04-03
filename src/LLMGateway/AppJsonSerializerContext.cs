@@ -7,9 +7,6 @@ using LLMGateway.Models.OpenAI;
 
 namespace LLMGateway;
 
-/// <summary>
-/// AOT-compatible JSON serializer context.
-/// </summary>
 [JsonSerializable(typeof(ChatCompletionRequest))]
 [JsonSerializable(typeof(ChatCompletionResponse))]
 [JsonSerializable(typeof(ModelListResponse))]
@@ -25,6 +22,11 @@ namespace LLMGateway;
 [JsonSerializable(typeof(List<ProviderResponse>))]
 [JsonSerializable(typeof(CreateProviderRequest))]
 [JsonSerializable(typeof(UpdateProviderRequest))]
+[JsonSerializable(typeof(ApiKeyResponse))]
+[JsonSerializable(typeof(List<ApiKeyResponse>))]
+[JsonSerializable(typeof(ApiKeyCreatedResponse))]
+[JsonSerializable(typeof(CreateApiKeyRequest))]
+[JsonSerializable(typeof(UpdateApiKeyRequest))]
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 internal partial class AppJsonSerializerContext : JsonSerializerContext

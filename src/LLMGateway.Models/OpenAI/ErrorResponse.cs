@@ -2,9 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace LLMGateway.Models.OpenAI;
 
-/// <summary>
-/// OpenAI-compatible error response.
-/// </summary>
 public class ErrorResponse
 {
     [JsonPropertyName("error")]
