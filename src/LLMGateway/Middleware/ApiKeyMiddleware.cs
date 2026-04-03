@@ -1,9 +1,9 @@
+using System.Security.Cryptography;
+using System.Text;
 using LLMGateway.Configuration;
 using LLMGateway.Data.Repositories;
 using LLMGateway.Models.OpenAI;
 using Microsoft.Extensions.Options;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace LLMGateway.Middleware;
 
@@ -72,7 +72,8 @@ public class ApiKeyMiddleware
 
         return adminKeys.Any(k =>
         {
-            if (!k.IsActive) return false;
+            if (!k.IsActive)
+                return false;
             var configuredBytes = Encoding.UTF8.GetBytes(k.Key);
             return configuredBytes.Length == providedKeyBytes.Length
                 && CryptographicOperations.FixedTimeEquals(configuredBytes, providedKeyBytes);

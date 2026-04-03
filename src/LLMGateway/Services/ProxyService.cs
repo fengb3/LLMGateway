@@ -1,7 +1,7 @@
-using LLMGateway.Models.OpenAI;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using LLMGateway.Models.OpenAI;
 
 namespace LLMGateway.Services;
 

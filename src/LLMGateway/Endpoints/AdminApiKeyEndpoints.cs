@@ -111,9 +111,12 @@ public static class AdminApiKeyEndpoints
 
             if (request is not null)
             {
-                if (request.Name is not null) entity.Name = request.Name;
-                if (request.IsActive.HasValue) entity.IsActive = request.IsActive.Value;
-                if (request.ExpiresAt.HasValue) entity.ExpiresAt = request.ExpiresAt.Value;
+                if (request.Name is not null)
+                    entity.Name = request.Name;
+                if (request.IsActive.HasValue)
+                    entity.IsActive = request.IsActive.Value;
+                if (request.ExpiresAt.HasValue)
+                    entity.ExpiresAt = request.ExpiresAt.Value;
             }
 
             await repo.UpdateAsync(entity, ct);

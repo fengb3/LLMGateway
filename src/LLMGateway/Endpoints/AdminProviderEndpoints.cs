@@ -104,11 +104,16 @@ public static class AdminProviderEndpoints
 
             if (request is not null)
             {
-                if (request.Name is not null) entity.Name = request.Name;
-                if (request.BaseUrl is not null) entity.BaseUrl = request.BaseUrl;
-                if (request.ApiKey is not null) entity.ApiKey = request.ApiKey;
-                if (request.Models is not null) entity.Models = request.Models;
-                if (request.IsEnabled.HasValue) entity.IsEnabled = request.IsEnabled.Value;
+                if (request.Name is not null)
+                    entity.Name = request.Name;
+                if (request.BaseUrl is not null)
+                    entity.BaseUrl = request.BaseUrl;
+                if (request.ApiKey is not null)
+                    entity.ApiKey = request.ApiKey;
+                if (request.Models is not null)
+                    entity.Models = request.Models;
+                if (request.IsEnabled.HasValue)
+                    entity.IsEnabled = request.IsEnabled.Value;
             }
 
             await repo.UpdateAsync(entity, ct);

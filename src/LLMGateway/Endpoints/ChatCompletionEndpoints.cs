@@ -1,6 +1,6 @@
+using System.Text.Json;
 using LLMGateway.Models.OpenAI;
 using LLMGateway.Services;
-using System.Text.Json;
 
 namespace LLMGateway.Endpoints;
 

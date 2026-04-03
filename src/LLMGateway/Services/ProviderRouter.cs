@@ -28,7 +28,8 @@ public class ProviderRouter : IProviderRouter
         var result = new List<(string, string)>();
         foreach (var provider in providers)
         {
-            if (!provider.IsEnabled) continue;
+            if (!provider.IsEnabled)
+                continue;
             foreach (var model in provider.Models)
                 result.Add((model, provider.Name));
         }
