@@ -3,7 +3,6 @@ using LLMGateway.Middleware;
 using LLMGateway.Models;
 using LLMGateway.Models.OpenAI;
 using LLMGateway.Services;
-using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace LLMGateway;
