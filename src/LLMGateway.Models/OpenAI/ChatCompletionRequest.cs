@@ -40,6 +40,12 @@ public class ChatCompletionRequest
 
     [JsonPropertyName("stream_options")]
     public StreamOptions? StreamOptions { get; set; }
+
+    [JsonPropertyName("tools")]
+    public List<OpenAITool>? Tools { get; set; }
+
+    [JsonPropertyName("tool_choice")]
+    public JsonElement? ToolChoice { get; set; }
 }
 
 public class ChatMessage
@@ -52,6 +58,15 @@ public class ChatMessage
 
     [JsonPropertyName("name")]
     public string? Name { get; set; }
+
+    [JsonPropertyName("reasoning_content")]
+    public string? ReasoningContent { get; set; }
+
+    [JsonPropertyName("tool_calls")]
+    public List<OpenAIToolCall>? ToolCalls { get; set; }
+
+    [JsonPropertyName("tool_call_id")]
+    public string? ToolCallId { get; set; }
 }
 
 public class StreamOptions

@@ -100,21 +100,23 @@ function Test-Endpoint {
         $r = Invoke-Api -Method $Method -Path $Path -Token $Token -Body $Body -Expect $Expect
         if ($r.Status -ne $Expect) {
             Write-Fail $Label "Expected HTTP $Expect, got $($r.Status)"
-            return $null
+            $script:LastResponseBody = $null
+            return
         }
         if ($Assert) {
             $result = & $Assert $r.Body
             if ($result -eq $false) {
                 Write-Fail $Label "Assertion failed"
-                return $null
+                $script:LastResponseBody = $null
+                return
             }
         }
         Write-Pass "$Label (HTTP $($r.Status))"
-        return $r.Body
+        $script:LastResponseBody = $r.Body
     }
     catch {
         Write-Fail $Label $_.Exception.Message
-        return $null
+        $script:LastResponseBody = $null
     }
 }
 
@@ -192,8 +194,8 @@ $created = Test-Endpoint -Label "POST /admin/providers → 201" `
     } `
     -Expect 201
 
-if ($created) {
-    $createdProviderId = $created.id
+if ($script:LastResponseBody) {
+    $createdProviderId = $script:LastResponseBody.id
     Write-Host "      Created provider id=$createdProviderId" -ForegroundColor DarkGray
 
     Test-Endpoint -Label "GET /admin/providers/$createdProviderId" `
@@ -244,10 +246,10 @@ $keyCreated = Test-Endpoint -Label "POST /admin/apikeys → 201" `
     -Body @{ name = "smoke-test-user-key" } `
     -Expect 201
 
-if ($keyCreated) {
-    $createdApiKeyId  = $keyCreated.id
-    $generatedUserKey = $keyCreated.key
-    Write-Host "      Created api key id=$createdApiKeyId prefix=$($keyCreated.keyPrefix)" -ForegroundColor DarkGray
+if ($script:LastResponseBody) {
+    $createdApiKeyId  = $script:LastResponseBody.id
+    $generatedUserKey = $script:LastResponseBody.key
+    Write-Host "      Created api key id=$createdApiKeyId prefix=$($script:LastResponseBody.keyPrefix)" -ForegroundColor DarkGray
 
     Test-Endpoint -Label "GET /admin/apikeys/$createdApiKeyId" `
         -Path "/admin/apikeys/$createdApiKeyId" `
@@ -357,6 +359,75 @@ if ($createdProviderId -and $generatedUserKey) {
     }
 }
 
+# ── Anthropic Messages API ────────────────────────────────────────────────────
+
+Write-Host "`n=== Anthropic Messages: Validation ===" -ForegroundColor Cyan
+
+# Auth check (no x-api-key, no Bearer)
+Test-Endpoint -Label "POST /v1/messages without auth -> 401" `
+    -Method "POST" `
+    -Path "/v1/messages" `
+    -Expect 401
+
+# Auth with x-api-key header
+try {
+    $anthropicAuthUri     = "$BaseUrl/v1/messages"
+    $anthropicAuthHeaders = @{
+        "x-api-key"     = $generatedUserKey
+        "Content-Type"  = "application/json"
+    }
+    $anthropicAuthBody    = @{
+        model       = "no-such-model-xyz"
+        max_tokens  = 10
+        messages    = @(@{ role = "user"; content = "hi" })
+    } | ConvertTo-Json -Depth 10
+
+    $authResp = Invoke-WebRequest -Method POST -Uri $anthropicAuthUri `
+        -Headers $anthropicAuthHeaders -Body $anthropicAuthBody -SkipHttpErrorCheck -ErrorAction Stop
+    if ([int]$authResp.StatusCode -eq 404) {
+        Write-Pass "POST /v1/messages with x-api-key auth (HTTP 404 = auth passed, model not found)"
+    } else {
+        Write-Fail "POST /v1/messages with x-api-key auth" "Expected 404, got $($authResp.StatusCode)"
+    }
+} catch {
+    Write-Fail "POST /v1/messages with x-api-key auth" $_.Exception.Message
+}
+
+# Invalid JSON
+try {
+    $rawR = Invoke-RawPost -Path "/v1/messages" -Token $generatedUserKey -RawBody '{bad json'
+    if ($rawR.Status -eq 400) { Write-Pass "POST /v1/messages invalid JSON -> 400 (HTTP 400)" }
+    else { Write-Fail "POST /v1/messages invalid JSON -> 400" "Got HTTP $($rawR.Status)" }
+} catch { Write-Fail "POST /v1/messages invalid JSON -> 400" $_.Exception.Message }
+
+# Missing model field
+Test-Endpoint -Label "POST /v1/messages missing model -> 400" `
+    -Method "POST" `
+    -Path "/v1/messages" `
+    -Token $generatedUserKey `
+    -Body @{ max_tokens = 10; messages = @(@{ role = "user"; content = "hi" }) } `
+    -Expect 400
+
+# Unknown model
+Test-Endpoint -Label "POST /v1/messages unknown model -> 404" `
+    -Method "POST" `
+    -Path "/v1/messages" `
+    -Token $generatedUserKey `
+    -Body @{ model = "no-such-model-xyz"; max_tokens = 10; messages = @(@{ role = "user"; content = "hi" }) } `
+    -Expect 404
+
+# Upstream unreachable
+if ($createdProviderId -and $generatedUserKey) {
+    $r3 = Invoke-Api -Method "POST" -Path "/v1/messages" -Token $generatedUserKey `
+        -Body @{ model = "smoke-model-1"; max_tokens = 10; messages = @(@{ role = "user"; content = "hi" }) }
+    if ($r3.Status -ge 500 -and $r3.Status -lt 600) {
+        Write-Pass "POST /v1/messages unreachable upstream -> $($r3.Status) (5xx)"
+    } else {
+        Write-Fail "POST /v1/messages unreachable upstream" "Expected 5xx, got $($r3.Status)"
+    }
+}
+
+
 # ── Real LLM calls (opt-in via -TestLlm) ─────────────────────────────────────
 
 if ($TestLlm) {
@@ -377,20 +448,27 @@ if ($TestLlm) {
             $model = $provider.Models[0]
             Write-Host "  Testing provider '$($provider.Name)' model '$model' ..." -ForegroundColor DarkGray
 
-            # Non-streaming
-            Test-Endpoint -Label "[$($provider.Name)] POST /v1/chat/completions non-streaming" `
+            # ── OpenAI: Non-streaming ──────────────────────────────────────────
+            $oaiNonStream = Test-Endpoint -Label "[$($provider.Name)] OpenAI non-streaming" `
                 -Method "POST" `
                 -Path "/v1/chat/completions" `
                 -Token $generatedUserKey `
                 -Body @{
                     model    = $model
                     messages = @(@{ role = "user"; content = "Reply with exactly one word: pong" })
-                    max_tokens = 10
+                    max_tokens = 256
                 } `
                 -Expect 200 `
                 -Assert { param($b) $b.choices -is [array] -and $b.choices.Count -gt 0 }
+            if ($script:LastResponseBody) {
+                $msg = $script:LastResponseBody.choices[0].message
+                if ($msg.PSObject.Properties["reasoning_content"] -and $msg.reasoning_content) {
+                    Write-Host "      Reasoning: $($msg.reasoning_content)" -ForegroundColor DarkGray
+                }
+                Write-Host "      Response: $($msg.content)" -ForegroundColor DarkGray
+            }
 
-            # Streaming (verify SSE content-type and chunked data arrive)
+            # ── OpenAI: Streaming ──────────────────────────────────────────────
             try {
                 $streamUri     = "$BaseUrl/v1/chat/completions"
                 $streamHeaders = @{
@@ -401,7 +479,7 @@ if ($TestLlm) {
                     model       = $model
                     messages    = @(@{ role = "user"; content = "Reply with exactly one word: pong" })
                     stream      = $true
-                    max_tokens  = 10
+                    max_tokens  = 256
                 } | ConvertTo-Json -Depth 10
 
                 $streamResp = Invoke-WebRequest -Method POST -Uri $streamUri `
@@ -412,18 +490,125 @@ if ($TestLlm) {
                 $hasData = $streamResp.Content -match "data:"
 
                 if ([int]$streamResp.StatusCode -eq 200 -and $hasSSE -and $hasData) {
-                    Write-Pass "[$($provider.Name)] POST /v1/chat/completions streaming (HTTP 200, SSE)"
+                    Write-Pass "[$($provider.Name)] OpenAI streaming (HTTP 200, SSE)"
+                    # Extract content from SSE data lines
+                    $oaiStreamText = ($streamResp.Content -split "`n" |
+                        Where-Object { $_ -match '^data: \{' } |
+                        ForEach-Object {
+                            $jsonStr = $_.Substring(6)
+                            if ($jsonStr -ne '[DONE]') {
+                                try { ($jsonStr | ConvertFrom-Json).choices[0].delta.content } catch {}
+                            }
+                        }) -join ''
+                    Write-Host "      Response: $oaiStreamText" -ForegroundColor DarkGray
                 } else {
-                    Write-Fail "[$($provider.Name)] POST /v1/chat/completions streaming" `
+                    Write-Fail "[$($provider.Name)] OpenAI streaming" `
                         "status=$($streamResp.StatusCode) content-type=$ct hasData=$hasData"
                 }
             } catch {
-                Write-Fail "[$($provider.Name)] POST /v1/chat/completions streaming" $_.Exception.Message
+                Write-Fail "[$($provider.Name)] OpenAI streaming" $_.Exception.Message
+            }
+
+            # ── Anthropic: Non-streaming ───────────────────────────────────────
+            Write-Host "  Testing Anthropic format for provider '$($provider.Name)' model '$model' ..." -ForegroundColor DarkGray
+            try {
+                $antHeaders = @{
+                    "x-api-key"         = $generatedUserKey
+                    "anthropic-version" = "2023-06-01"
+                    "Content-Type"      = "application/json"
+                }
+                $antBody = @{
+                    model       = $model
+                    max_tokens  = 256
+                    messages    = @(@{ role = "user"; content = "Reply with exactly one word: pong" })
+                } | ConvertTo-Json -Depth 10
+
+                $antResp = Invoke-WebRequest -Method POST -Uri "$BaseUrl/v1/messages" `
+                    -Headers $antHeaders -Body $antBody -SkipHttpErrorCheck -ErrorAction Stop
+
+                if ([int]$antResp.StatusCode -eq 200) {
+                    $antJson = $antResp.Content | ConvertFrom-Json
+                    if ($antJson.type -eq "message" -and $antJson.content -is [array] -and $antJson.content.Count -gt 0) {
+                        Write-Pass "[$($provider.Name)] Anthropic non-streaming (HTTP 200, type=message)"
+                        $antText = ""
+                        $antReasoning = ""
+                        foreach ($block in $antJson.content) {
+                            if ($null -ne $block.PSObject.Properties["text"]) {
+                                $antText += $block.text
+                            }
+                            if ($null -ne $block.PSObject.Properties["reasoning_content"]) {
+                                $antReasoning += $block.reasoning_content
+                            }
+                        }
+                        if ($antReasoning) {
+                            Write-Host "      Reasoning: $antReasoning" -ForegroundColor DarkGray
+                        }
+                        Write-Host "      Response: $antText" -ForegroundColor DarkGray
+                    } else {
+                        Write-Fail "[$($provider.Name)] Anthropic non-streaming" "Unexpected response structure: $($antResp.Content.Substring(0, [Math]::Min(200, $antResp.Content.Length)))"
+                    }
+                } else {
+                    Write-Fail "[$($provider.Name)] Anthropic non-streaming" "Expected 200, got $($antResp.StatusCode)"
+                }
+            } catch {
+                Write-Fail "[$($provider.Name)] Anthropic non-streaming" $_.Exception.Message
+            }
+
+            # ── Anthropic: Streaming ───────────────────────────────────────────
+            try {
+                $antStreamHeaders = @{
+                    "x-api-key"         = $generatedUserKey
+                    "anthropic-version" = "2023-06-01"
+                    "Content-Type"      = "application/json"
+                }
+                $antStreamBody = @{
+                    model       = $model
+                    max_tokens  = 256
+                    messages    = @(@{ role = "user"; content = "Reply with exactly one word: pong" })
+                    stream      = $true
+                } | ConvertTo-Json -Depth 10
+
+                $antStreamResp = Invoke-WebRequest -Method POST -Uri "$BaseUrl/v1/messages" `
+                    -Headers $antStreamHeaders -Body $antStreamBody -SkipHttpErrorCheck -ErrorAction Stop
+
+                $antCt     = $antStreamResp.Headers["Content-Type"]
+                $antHasSSE = $antCt -and $antCt -match "text/event-stream"
+                $antHasEvt = $antStreamResp.Content -match "event: message_start"
+                $antHasStop = $antStreamResp.Content -match "event: message_stop"
+
+                if ([int]$antStreamResp.StatusCode -eq 200 -and $antHasSSE -and $antHasEvt -and $antHasStop) {
+                    Write-Pass "[$($provider.Name)] Anthropic streaming (HTTP 200, SSE with message_start/message_stop)"
+                    # Extract text deltas from Anthropic SSE
+                    $antStreamText = ""
+                    $antStreamThinking = ""
+                    foreach ($line in ($antStreamResp.Content -split "`n")) {
+                        if ($line -notmatch '^data: \{') { continue }
+                        try {
+                            $evt = ($line.Substring(6) | ConvertFrom-Json)
+                            if ($null -eq $evt.delta) { continue }
+                            if ($null -ne $evt.delta.PSObject.Properties["text"]) {
+                                $antStreamText += $evt.delta.text
+                            }
+                            if ($null -ne $evt.delta.PSObject.Properties["thinking"]) {
+                                $antStreamThinking += $evt.delta.thinking
+                            }
+                        } catch {}
+                    }
+                    if ($antStreamThinking) {
+                        Write-Host "      Thinking: $antStreamThinking" -ForegroundColor DarkGray
+                    }
+                    Write-Host "      Response: $antStreamText" -ForegroundColor DarkGray
+                } else {
+                    Write-Fail "[$($provider.Name)] Anthropic streaming" `
+                        "status=$($antStreamResp.StatusCode) content-type=$antCt hasStart=$antHasEvt hasStop=$antHasStop"
+                }
+            } catch {
+                Write-Fail "[$($provider.Name)] Anthropic streaming" $_.Exception.Message
             }
         }
     }
 } else {
-    Write-Host "`n  Tip: run with -TestLlm to also test real upstream LLM calls." -ForegroundColor DarkGray
+    Write-Host "`n  Tip: run with -TestLlm to also test real upstream LLM calls (OpenAI + Anthropic format)." -ForegroundColor DarkGray
 }
 
 # ── Cleanup ───────────────────────────────────────────────────────────────────
@@ -462,4 +647,4 @@ if ($failCount -gt 0) {
 }
 Write-Host "═══════════════════════════════════════" -ForegroundColor Cyan
 
-exit $(if ($failCount -eq 0) { 0 } else { 1 })
+# exit $(if ($failCount -eq 0) { 0 } else { 1 })

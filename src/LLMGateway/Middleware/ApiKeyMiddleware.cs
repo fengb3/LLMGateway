@@ -35,13 +35,22 @@ public class ApiKeyMiddleware
         }
 
         var authHeader = context.Request.Headers.Authorization.ToString();
-        if (string.IsNullOrEmpty(authHeader) || !authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        var xApiKey = context.Request.Headers["x-api-key"].ToString();
+
+        string providedKey;
+        if (!string.IsNullOrEmpty(authHeader) && authHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
         {
-            await WriteUnauthorizedAsync(context, "Missing or invalid Authorization header. Use: Authorization: Bearer <api-key>", "missing_api_key");
+            providedKey = authHeader["Bearer ".Length..].Trim();
+        }
+        else if (!string.IsNullOrEmpty(xApiKey))
+        {
+            providedKey = xApiKey.Trim();
+        }
+        else
+        {
+            await WriteUnauthorizedAsync(context, "Missing or invalid Authorization header. Use: Authorization: Bearer <api-key> or x-api-key header.", "missing_api_key");
             return;
         }
-
-        var providedKey = authHeader["Bearer ".Length..].Trim();
         var isAdminRoute = context.Request.Path.StartsWithSegments("/admin", StringComparison.OrdinalIgnoreCase);
 
         if (isAdminRoute)

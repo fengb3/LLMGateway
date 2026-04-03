@@ -7,6 +7,9 @@ using LLMGateway.Models;
 using LLMGateway.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace LLMGateway;
 
@@ -15,6 +18,26 @@ public class Program
     public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateSlimBuilder(args);
+
+        builder.Services.AddSerilog(loggerConfig =>
+        {
+            loggerConfig
+                .MinimumLevel.Information()
+                .Enrich.FromLogContext()
+                .WriteTo.Console(
+                    theme: AnsiConsoleTheme.Code,
+                    outputTemplate:
+                        "{NewLine}╔───{Timestamp:HH:mm:ss.fff} {Level:u4} │ ({SourceContext}) {NewLine}╚───{Message:lj}{NewLine}{Exception}")
+                .WriteTo.File(
+                    path: "logs/llmgateway-.log",
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 20_000_000,
+                    rollOnFileSizeLimit: true,
+                    shared: true,
+                    outputTemplate:
+                        "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+        });
 
         // JSON serialization (source-generated)
         builder.Services.ConfigureHttpJsonOptions(options =>
@@ -91,6 +114,9 @@ public class Program
         // ── OpenAI-compatible API ───────────────────────────────────────────
         app.MapModelEndpoints();
         app.MapChatCompletionEndpoints();
+
+        // ── Anthropic-compatible API ────────────────────────────────────────
+        app.MapAnthropicMessagesEndpoints();
 
         app.Run();
     }
