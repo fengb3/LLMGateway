@@ -1,5 +1,6 @@
+using System.Text.Json;
 using LLMGateway.Configuration;
-using Microsoft.Extensions.Options;
+using LLMGateway.Data;
 
 namespace LLMGateway.Services;
 
@@ -8,34 +9,42 @@ namespace LLMGateway.Services;
 /// </summary>
 public class ProviderRouter : IProviderRouter
 {
-    private readonly IOptionsSnapshot<GatewayOptions> _options;
+    private readonly IProviderRepository _repository;
 
-    public ProviderRouter(IOptionsSnapshot<GatewayOptions> options)
+    public ProviderRouter(IProviderRepository repository)
     {
-        _options = options;
+        _repository = repository;
     }
 
-    public ProviderOptions? GetProvider(string modelName)
+    public async Task<ProviderOptions?> GetProviderAsync(string modelName, CancellationToken ct = default)
     {
-        foreach (var provider in _options.Value.Providers)
-        {
-            foreach (var model in provider.Models)
-            {
-                if (string.Equals(model, modelName, StringComparison.OrdinalIgnoreCase))
-                    return provider;
-            }
-        }
-        return null;
+        var entity = await _repository.GetByModelNameAsync(modelName, ct);
+        return entity is null ? null : MapToOptions(entity);
     }
 
-    public IReadOnlyList<(string ModelName, string ProviderName)> GetAllModels()
+    public async Task<IReadOnlyList<(string ModelName, string ProviderName)>> GetAllModelsAsync(CancellationToken ct = default)
     {
+        var providers = await _repository.GetAllAsync(ct);
         var result = new List<(string, string)>();
-        foreach (var provider in _options.Value.Providers)
+        foreach (var provider in providers)
         {
-            foreach (var model in provider.Models)
+            if (!provider.IsEnabled) continue;
+            var models = JsonSerializer.Deserialize(provider.ModelsJson, AppJsonSerializerContext.Default.ListString) ?? [];
+            foreach (var model in models)
                 result.Add((model, provider.Name));
         }
         return result;
+    }
+
+    private static ProviderOptions MapToOptions(ProviderEntity entity)
+    {
+        var models = JsonSerializer.Deserialize(entity.ModelsJson, AppJsonSerializerContext.Default.ListString) ?? [];
+        return new ProviderOptions
+        {
+            Name = entity.Name,
+            BaseUrl = entity.BaseUrl,
+            ApiKey = entity.ApiKey,
+            Models = models
+        };
     }
 }

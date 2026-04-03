@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using LLMGateway.Configuration;
 using LLMGateway.Models;
+using LLMGateway.Models.Admin;
 using LLMGateway.Models.OpenAI;
 
 namespace LLMGateway;
@@ -19,6 +20,11 @@ namespace LLMGateway;
 [JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(object))]
+[JsonSerializable(typeof(List<string>))]
+[JsonSerializable(typeof(ProviderResponse))]
+[JsonSerializable(typeof(List<ProviderResponse>))]
+[JsonSerializable(typeof(CreateProviderRequest))]
+[JsonSerializable(typeof(UpdateProviderRequest))]
 [JsonSourceGenerationOptions(
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
 internal partial class AppJsonSerializerContext : JsonSerializerContext

@@ -7,10 +7,10 @@ public interface IProviderRouter
     /// <summary>
     /// Returns the provider configured for the given model name, or null if not found.
     /// </summary>
-    ProviderOptions? GetProvider(string modelName);
+    Task<ProviderOptions?> GetProviderAsync(string modelName, CancellationToken ct = default);
 
     /// <summary>
     /// Returns all configured model names across all providers.
     /// </summary>
-    IReadOnlyList<(string ModelName, string ProviderName)> GetAllModels();
+    Task<IReadOnlyList<(string ModelName, string ProviderName)>> GetAllModelsAsync(CancellationToken ct = default);
 }

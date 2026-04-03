@@ -1,4 +1,6 @@
 using LLMGateway.Configuration;
+using LLMGateway.Data;
+using LLMGateway.Endpoints;
 using LLMGateway.Middleware;
 using LLMGateway.Models;
 using LLMGateway.Models.OpenAI;
@@ -9,7 +11,7 @@ namespace LLMGateway;
 
 public class Program
 {
-    public static void Main(string[] args)
+    public static async Task Main(string[] args)
     {
         var builder = WebApplication.CreateSlimBuilder(args);
 
@@ -22,6 +24,13 @@ public class Program
         // Gateway configuration
         builder.Services.Configure<GatewayOptions>(
             builder.Configuration.GetSection(GatewayOptions.SectionName));
+
+        // Database
+        var dbPath = builder.Configuration["Gateway:DatabasePath"] ?? "gateway.db";
+        var connectionString = $"Data Source={dbPath}";
+        builder.Services.AddSingleton(new SqliteConnectionFactory(connectionString));
+        builder.Services.AddScoped<IProviderRepository, SqliteProviderRepository>();
+        builder.Services.AddTransient<DatabaseInitializer>();
 
         // HTTP client for proxying upstream requests.
         // "upstream" is used for non-streaming requests; "upstream-streaming" uses an infinite
@@ -53,17 +62,27 @@ public class Program
 
         var app = builder.Build();
 
+        // Initialize database and seed from configuration
+        using (var scope = app.Services.CreateScope())
+        {
+            var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
+            await initializer.InitializeAsync();
+        }
+
         // API key authentication for all non-health routes
         app.UseMiddleware<ApiKeyMiddleware>();
 
         // ── Health ──────────────────────────────────────────────────────────
         app.MapGet("/health", () => TypedResults.Ok(new HealthResponse()));
 
+        // ── Admin ───────────────────────────────────────────────────────────
+        app.MapAdminEndpoints();
+
         // ── Models list ─────────────────────────────────────────────────────
-        app.MapGet("/v1/models", (IProviderRouter router) =>
+        app.MapGet("/v1/models", async (IProviderRouter router, CancellationToken cancellationToken) =>
         {
             var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var models = router.GetAllModels()
+            var models = (await router.GetAllModelsAsync(cancellationToken))
                 .Select(m => new ModelInfo
                 {
                     Id = m.ModelName,
@@ -125,7 +144,7 @@ public class Program
                 return;
             }
 
-            var provider = router.GetProvider(request.Model);
+            var provider = await router.GetProviderAsync(request.Model, cancellationToken);
             if (provider is null)
             {
                 context.Response.StatusCode = StatusCodes.Status404NotFound;
