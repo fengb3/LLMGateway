@@ -1,6 +1,8 @@
 using LLMGateway.Configuration;
 using LLMGateway.Models.OpenAI;
 using Microsoft.Extensions.Options;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace LLMGateway.Middleware;
 
@@ -46,8 +48,16 @@ public class ApiKeyMiddleware
         }
 
         var providedKey = authHeader["Bearer ".Length..].Trim();
-        var validKey = options.Value.ApiKeys
-            .FirstOrDefault(k => k.IsActive && k.Key == providedKey);
+        var providedKeyBytes = Encoding.UTF8.GetBytes(providedKey);
+
+        // Use constant-time comparison to prevent timing side-channel attacks.
+        var validKey = options.Value.ApiKeys.FirstOrDefault(k =>
+        {
+            if (!k.IsActive) return false;
+            var configuredBytes = Encoding.UTF8.GetBytes(k.Key);
+            return configuredBytes.Length == providedKeyBytes.Length
+                && CryptographicOperations.FixedTimeEquals(configuredBytes, providedKeyBytes);
+        });
 
         if (validKey is null)
         {

@@ -33,7 +33,9 @@ public class ProxyService
         var targetUrl = upstreamBaseUrl.TrimEnd('/') + "/chat/completions";
         var isStreaming = request.Stream == true;
 
-        var client = _httpClientFactory.CreateClient("upstream");
+        // Use a dedicated client with infinite timeout for SSE streams so long-running
+        // responses are not aborted mid-stream. Non-streaming requests use a capped timeout.
+        var client = _httpClientFactory.CreateClient(isStreaming ? "upstream-streaming" : "upstream");
 
         var jsonBody = JsonSerializer.Serialize(request, AppJsonSerializerContext.Default.ChatCompletionRequest);
         using var upstreamRequest = new HttpRequestMessage(HttpMethod.Post, targetUrl)
@@ -82,9 +84,20 @@ public class ProxyService
             cancellationToken);
 
         context.Response.StatusCode = (int)upstreamResponse.StatusCode;
-        context.Response.ContentType = "text/event-stream";
-        context.Response.Headers.CacheControl = "no-cache";
-        context.Response.Headers.Connection = "keep-alive";
+
+        // Only force SSE headers when the upstream is actually streaming; for upstream errors
+        // (e.g. 4xx/5xx returning JSON) pass through the upstream content type so clients
+        // can parse the error payload normally.
+        var upstreamContentType = upstreamResponse.Content.Headers.ContentType?.MediaType;
+        if (upstreamContentType == "text/event-stream")
+        {
+            context.Response.ContentType = "text/event-stream";
+            context.Response.Headers.CacheControl = "no-cache";
+        }
+        else
+        {
+            context.Response.ContentType = upstreamContentType ?? "application/json";
+        }
 
         await using var upstreamStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
         await upstreamStream.CopyToAsync(context.Response.Body, cancellationToken);

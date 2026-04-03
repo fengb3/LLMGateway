@@ -3,7 +3,6 @@ using LLMGateway.Middleware;
 using LLMGateway.Models;
 using LLMGateway.Models.OpenAI;
 using LLMGateway.Services;
-using Microsoft.Extensions.Options;
 using System.Text.Json;
 
 namespace LLMGateway;
@@ -24,11 +23,28 @@ public class Program
         builder.Services.Configure<GatewayOptions>(
             builder.Configuration.GetSection(GatewayOptions.SectionName));
 
-        // HTTP client for proxying upstream requests
+        // HTTP client for proxying upstream requests.
+        // "upstream" is used for non-streaming requests; "upstream-streaming" uses an infinite
+        // timeout so long-running SSE responses are not aborted mid-stream.
         builder.Services.AddHttpClient("upstream")
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
                 AllowAutoRedirect = false
+            })
+            .ConfigureHttpClient(client =>
+            {
+                client.Timeout = TimeSpan.FromMinutes(5);
+            });
+
+        builder.Services.AddHttpClient("upstream-streaming")
+            .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+            {
+                AllowAutoRedirect = false
+            })
+            .ConfigureHttpClient(client =>
+            {
+                // Rely solely on the request CancellationToken for SSE streams
+                client.Timeout = Timeout.InfiniteTimeSpan;
             });
 
         // Gateway services
