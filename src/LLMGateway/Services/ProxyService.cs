@@ -84,7 +84,6 @@ public class ProxyService
         context.Response.StatusCode = (int)upstreamResponse.StatusCode;
         context.Response.ContentType = "text/event-stream";
         context.Response.Headers.CacheControl = "no-cache";
-        context.Response.Headers.Connection = "keep-alive";
 
         await using var upstreamStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
         await upstreamStream.CopyToAsync(context.Response.Body, cancellationToken);
