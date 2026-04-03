@@ -30,7 +30,7 @@ public class ProxyService
         ChatCompletionRequest request,
         CancellationToken cancellationToken)
     {
-        var targetUrl = upstreamBaseUrl.TrimEnd('/') + "/v1/chat/completions";
+        var targetUrl = upstreamBaseUrl.TrimEnd('/') + "/chat/completions";
         var isStreaming = request.Stream == true;
 
         var client = _httpClientFactory.CreateClient("upstream");

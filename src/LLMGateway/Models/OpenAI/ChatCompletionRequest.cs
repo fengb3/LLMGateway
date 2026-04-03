@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace LLMGateway.Models.OpenAI;
@@ -29,7 +30,7 @@ public class ChatCompletionRequest
     public int? N { get; set; }
 
     [JsonPropertyName("stop")]
-    public object? Stop { get; set; }
+    public JsonElement? Stop { get; set; }
 
     [JsonPropertyName("presence_penalty")]
     public double? PresencePenalty { get; set; }
@@ -50,7 +51,7 @@ public class ChatMessage
     public string Role { get; set; } = string.Empty;
 
     [JsonPropertyName("content")]
-    public object? Content { get; set; }
+    public JsonElement? Content { get; set; }
 
     [JsonPropertyName("name")]
     public string? Name { get; set; }

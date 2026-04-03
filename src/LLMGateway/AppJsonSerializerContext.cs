@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using LLMGateway.Configuration;
 using LLMGateway.Models;
@@ -15,6 +16,7 @@ namespace LLMGateway;
 [JsonSerializable(typeof(HealthResponse))]
 [JsonSerializable(typeof(List<ModelInfo>))]
 [JsonSerializable(typeof(GatewayOptions))]
+[JsonSerializable(typeof(JsonElement))]
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(object))]
 [JsonSourceGenerationOptions(
