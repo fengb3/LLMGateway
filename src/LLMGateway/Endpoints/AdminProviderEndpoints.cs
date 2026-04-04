@@ -1,14 +1,13 @@
-using System.Text.Json;
-using LLMGateway.Data;
-using LLMGateway.Models;
+using LLMGateway.Data.Entities;
+using LLMGateway.Data.Repositories;
 using LLMGateway.Models.Admin;
 using LLMGateway.Models.OpenAI;
 
 namespace LLMGateway.Endpoints;
 
-public static class AdminEndpoints
+public static class AdminProviderEndpoints
 {
-    public static WebApplication MapAdminEndpoints(this WebApplication app)
+    public static WebApplication MapAdminProviderEndpoints(this WebApplication app)
     {
         var group = app.MapGroup("/admin/providers");
 
@@ -55,7 +54,6 @@ public static class AdminEndpoints
                 });
             }
 
-            // Check for duplicate name
             var existing = await repo.GetByNameAsync(request.Name, ct);
             if (existing is not null)
             {
@@ -70,12 +68,12 @@ public static class AdminEndpoints
                 });
             }
 
-            var entity = new Data.ProviderEntity
+            var entity = new ProviderEntity
             {
                 Name = request.Name,
                 BaseUrl = request.BaseUrl,
                 ApiKey = request.ApiKey,
-                ModelsJson = JsonSerializer.Serialize(request.Models, AppJsonSerializerContext.Default.ListString),
+                Models = request.Models,
                 IsEnabled = request.IsEnabled,
                 CreatedAt = DateTime.UtcNow,
                 UpdatedAt = DateTime.UtcNow
@@ -106,12 +104,16 @@ public static class AdminEndpoints
 
             if (request is not null)
             {
-                if (request.Name is not null) entity.Name = request.Name;
-                if (request.BaseUrl is not null) entity.BaseUrl = request.BaseUrl;
-                if (request.ApiKey is not null) entity.ApiKey = request.ApiKey;
+                if (request.Name is not null)
+                    entity.Name = request.Name;
+                if (request.BaseUrl is not null)
+                    entity.BaseUrl = request.BaseUrl;
+                if (request.ApiKey is not null)
+                    entity.ApiKey = request.ApiKey;
                 if (request.Models is not null)
-                    entity.ModelsJson = JsonSerializer.Serialize(request.Models, AppJsonSerializerContext.Default.ListString);
-                if (request.IsEnabled.HasValue) entity.IsEnabled = request.IsEnabled.Value;
+                    entity.Models = request.Models;
+                if (request.IsEnabled.HasValue)
+                    entity.IsEnabled = request.IsEnabled.Value;
             }
 
             await repo.UpdateAsync(entity, ct);
@@ -141,11 +143,8 @@ public static class AdminEndpoints
         return app;
     }
 
-    private static ProviderResponse MapToResponse(Data.ProviderEntity entity)
+    private static ProviderResponse MapToResponse(ProviderEntity entity)
     {
-        var models = JsonSerializer.Deserialize(entity.ModelsJson, AppJsonSerializerContext.Default.ListString) ?? [];
-
-        // Mask API key: show only last 4 characters
         var maskedApiKey = entity.ApiKey.Length > 4
             ? new string('*', entity.ApiKey.Length - 4) + entity.ApiKey[^4..]
             : new string('*', entity.ApiKey.Length);
@@ -156,7 +155,7 @@ public static class AdminEndpoints
             Name = entity.Name,
             BaseUrl = entity.BaseUrl,
             ApiKey = maskedApiKey,
-            Models = models,
+            Models = entity.Models,
             IsEnabled = entity.IsEnabled,
             CreatedAt = entity.CreatedAt,
             UpdatedAt = entity.UpdatedAt

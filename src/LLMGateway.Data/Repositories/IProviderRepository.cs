@@ -1,6 +1,8 @@
-namespace LLMGateway.Data;
+using LLMGateway.Data.Entities;
 
-public interface IProviderRepository : IAsyncDisposable
+namespace LLMGateway.Data.Repositories;
+
+public interface IProviderRepository
 {
     Task<IReadOnlyList<ProviderEntity>> GetAllAsync(CancellationToken ct = default);
     Task<ProviderEntity?> GetByIdAsync(int id, CancellationToken ct = default);

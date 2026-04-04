@@ -2,9 +2,6 @@ using System.Text.Json.Serialization;
 
 namespace LLMGateway.Models.OpenAI;
 
-/// <summary>
-/// Response from the /v1/models endpoint.
-/// </summary>
 public class ModelListResponse
 {
     [JsonPropertyName("object")]

@@ -1,11 +1,15 @@
 using LLMGateway.Configuration;
 using LLMGateway.Data;
+using LLMGateway.Data.Repositories;
 using LLMGateway.Endpoints;
 using LLMGateway.Middleware;
 using LLMGateway.Models;
-using LLMGateway.Models.OpenAI;
 using LLMGateway.Services;
-using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using Serilog;
+using Serilog.Events;
+using Serilog.Sinks.SystemConsole.Themes;
 
 namespace LLMGateway;
 
@@ -15,7 +19,27 @@ public class Program
     {
         var builder = WebApplication.CreateSlimBuilder(args);
 
-        // AOT-compatible JSON serialization
+        builder.Services.AddSerilog(loggerConfig =>
+        {
+            loggerConfig
+                .MinimumLevel.Information()
+                .Enrich.FromLogContext()
+                .WriteTo.Console(
+                    theme: AnsiConsoleTheme.Code,
+                    outputTemplate:
+                        "{NewLine}╔───{Timestamp:HH:mm:ss.fff} {Level:u4} │ ({SourceContext}) {NewLine}╚───{Message:lj}{NewLine}{Exception}")
+                .WriteTo.File(
+                    path: "logs/llmgateway-.log",
+                    rollingInterval: RollingInterval.Day,
+                    retainedFileCountLimit: 14,
+                    fileSizeLimitBytes: 20_000_000,
+                    rollOnFileSizeLimit: true,
+                    shared: true,
+                    outputTemplate:
+                        "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+        });
+
+        // JSON serialization (source-generated)
         builder.Services.ConfigureHttpJsonOptions(options =>
         {
             options.SerializerOptions.TypeInfoResolverChain.Insert(0, AppJsonSerializerContext.Default);
@@ -25,16 +49,15 @@ public class Program
         builder.Services.Configure<GatewayOptions>(
             builder.Configuration.GetSection(GatewayOptions.SectionName));
 
-        // Database
+        // Database – EF Core with SQLite
         var dbPath = builder.Configuration["Gateway:DatabasePath"] ?? "gateway.db";
-        var connectionString = $"Data Source={dbPath}";
-        builder.Services.AddSingleton(new SqliteConnectionFactory(connectionString));
+        builder.Services.AddDbContext<AppDbContext>(options =>
+            options.UseSqlite($"Data Source={dbPath}"));
         builder.Services.AddScoped<IProviderRepository, SqliteProviderRepository>();
+        builder.Services.AddScoped<IApiKeyRepository, SqliteApiKeyRepository>();
         builder.Services.AddTransient<DatabaseInitializer>();
 
-        // HTTP client for proxying upstream requests.
-        // "upstream" is used for non-streaming requests; "upstream-streaming" uses an infinite
-        // timeout so long-running SSE responses are not aborted mid-stream.
+        // HTTP clients for proxying upstream requests
         builder.Services.AddHttpClient("upstream")
             .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
             {
@@ -52,7 +75,6 @@ public class Program
             })
             .ConfigureHttpClient(client =>
             {
-                // Rely solely on the request CancellationToken for SSE streams
                 client.Timeout = Timeout.InfiniteTimeSpan;
             });
 
@@ -62,114 +84,39 @@ public class Program
 
         var app = builder.Build();
 
-        // Initialize database and seed from configuration
+        // Initialize database: apply migrations and seed providers from config
         using (var scope = app.Services.CreateScope())
         {
             var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
-            await initializer.InitializeAsync();
+            var gatewayOptions = scope.ServiceProvider.GetRequiredService<IOptions<GatewayOptions>>().Value;
+            var seedProviders = gatewayOptions.Providers
+                .Select(p => new SeedProvider
+                {
+                    Name = p.Name,
+                    BaseUrl = p.BaseUrl,
+                    ApiKey = p.ApiKey,
+                    Models = p.Models
+                })
+                .ToList();
+            await initializer.InitializeAsync(seedProviders);
         }
 
-        // API key authentication for all non-health routes
+        // API key authentication
         app.UseMiddleware<ApiKeyMiddleware>();
 
         // ── Health ──────────────────────────────────────────────────────────
         app.MapGet("/health", () => TypedResults.Ok(new HealthResponse()));
 
         // ── Admin ───────────────────────────────────────────────────────────
-        app.MapAdminEndpoints();
+        app.MapAdminProviderEndpoints();
+        app.MapAdminApiKeyEndpoints();
 
-        // ── Models list ─────────────────────────────────────────────────────
-        app.MapGet("/v1/models", async (IProviderRouter router, CancellationToken cancellationToken) =>
-        {
-            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
-            var models = (await router.GetAllModelsAsync(cancellationToken))
-                .Select(m => new ModelInfo
-                {
-                    Id = m.ModelName,
-                    OwnedBy = m.ProviderName,
-                    Created = now
-                })
-                .ToList();
+        // ── OpenAI-compatible API ───────────────────────────────────────────
+        app.MapModelEndpoints();
+        app.MapChatCompletionEndpoints();
 
-            return Results.Ok(new ModelListResponse { Data = models });
-        });
-
-        // ── Chat Completions ─────────────────────────────────────────────────
-        app.MapPost("/v1/chat/completions", async (
-            HttpContext context,
-            IProviderRouter router,
-            ProxyService proxy,
-            CancellationToken cancellationToken) =>
-        {
-            ChatCompletionRequest? request;
-            try
-            {
-                request = await context.Request.ReadFromJsonAsync(
-                    AppJsonSerializerContext.Default.ChatCompletionRequest,
-                    cancellationToken);
-            }
-            catch (JsonException)
-            {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                await context.Response.WriteAsJsonAsync(
-                    new ErrorResponse
-                    {
-                        Error = new ErrorDetail
-                        {
-                            Message = "Invalid JSON in request body.",
-                            Type = "invalid_request_error",
-                            Code = "invalid_json"
-                        }
-                    },
-                    AppJsonSerializerContext.Default.ErrorResponse,
-                    cancellationToken: cancellationToken);
-                return;
-            }
-
-            if (request is null || string.IsNullOrWhiteSpace(request.Model))
-            {
-                context.Response.StatusCode = StatusCodes.Status400BadRequest;
-                await context.Response.WriteAsJsonAsync(
-                    new ErrorResponse
-                    {
-                        Error = new ErrorDetail
-                        {
-                            Message = "Request body must include a 'model' field.",
-                            Type = "invalid_request_error",
-                            Code = "missing_model"
-                        }
-                    },
-                    AppJsonSerializerContext.Default.ErrorResponse,
-                    cancellationToken: cancellationToken);
-                return;
-            }
-
-            var provider = await router.GetProviderAsync(request.Model, cancellationToken);
-            if (provider is null)
-            {
-                context.Response.StatusCode = StatusCodes.Status404NotFound;
-                await context.Response.WriteAsJsonAsync(
-                    new ErrorResponse
-                    {
-                        Error = new ErrorDetail
-                        {
-                            Message = $"Model '{request.Model}' is not configured in the gateway.",
-                            Type = "invalid_request_error",
-                            Code = "model_not_found"
-                        }
-                    },
-                    AppJsonSerializerContext.Default.ErrorResponse,
-                    cancellationToken: cancellationToken);
-                return;
-            }
-
-            await proxy.ProxyChatCompletionAsync(
-                context,
-                provider.BaseUrl,
-                provider.ApiKey,
-                request,
-                cancellationToken);
-        });
+        // ── Anthropic-compatible API ────────────────────────────────────────
+        app.MapAnthropicMessagesEndpoints();
 
         app.Run();
     }

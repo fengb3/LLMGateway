@@ -1,7 +1,7 @@
-using LLMGateway.Models.OpenAI;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using LLMGateway.Models.OpenAI;
 
 namespace LLMGateway.Services;
 
@@ -102,5 +102,36 @@ public class ProxyService
         await using var upstreamStream = await upstreamResponse.Content.ReadAsStreamAsync(cancellationToken);
         await upstreamStream.CopyToAsync(context.Response.Body, cancellationToken);
         await context.Response.Body.FlushAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a ChatCompletion request upstream and returns the raw HTTP response
+    /// without piping it to the client. Used when the caller needs to transform
+    /// the response before sending it (e.g., Anthropic format conversion).
+    /// </summary>
+    public async Task<HttpResponseMessage> SendUpstreamAsync(
+        string upstreamBaseUrl,
+        string upstreamApiKey,
+        ChatCompletionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var targetUrl = upstreamBaseUrl.TrimEnd('/') + "/chat/completions";
+        var isStreaming = request.Stream == true;
+        var client = _httpClientFactory.CreateClient(isStreaming ? "upstream-streaming" : "upstream");
+
+        var jsonBody = JsonSerializer.Serialize(request, AppJsonSerializerContext.Default.ChatCompletionRequest);
+        using var upstreamRequest = new HttpRequestMessage(HttpMethod.Post, targetUrl)
+        {
+            Content = new StringContent(jsonBody, Encoding.UTF8, "application/json")
+        };
+
+        upstreamRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", upstreamApiKey);
+
+        _logger.LogInformation("Routing model '{Model}' → {Url}", request.Model, targetUrl);
+
+        return await client.SendAsync(
+            upstreamRequest,
+            isStreaming ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+            cancellationToken);
     }
 }

@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LLMGateway.Data/LLMGateway.Data.csproj" />
+    <Project Path="src/LLMGateway.Models/LLMGateway.Models.csproj" />
+    <Project Path="src/LLMGateway/LLMGateway.csproj" />
+  </Folder>
+</Solution>
