@@ -1,0 +1,37 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "AllowedHosts": "*",
+  "Gateway": {
+    "DatabasePath": "gateway.db",
+    "Providers": [
+      {
+        "Name": "GLM",
+        "BaseUrl": "https://open.bigmodel.cn/api/coding/paas/v4",
+        "ApiKey": "YOUR_GLM_API_KEY_HERE",
+        "Models": [
+          "glm-4.5-air",
+          "glm-5",
+          "glm-4.5-airx",
+          "glm-4-long"
+        ]
+      },
+      {
+        "Name": "DeepSeek",
+        "BaseUrl": "https://api.deepseek.com",
+        "ApiKey": "YOUR_DEEPSEEK_KEY_HERE",
+        "Models": [
+          "deepseek-chat",
+          "deepseek-reasoner"
+        ]
+      }
+    ],
+    "AdminApiKeys": [
+      { "Key": "YOUR_ADMIN_KEY_HERE", "Name": "default-admin", "IsActive": true }
+    ]
+  }
+}

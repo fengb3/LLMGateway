@@ -27,7 +27,7 @@ public class Program
                 .WriteTo.Console(
                     theme: AnsiConsoleTheme.Code,
                     outputTemplate:
-                        "{NewLine}╔───{Timestamp:HH:mm:ss.fff} {Level:u4} │ ({SourceContext}) {NewLine}╚───{Message:lj}{NewLine}{Exception}")
+                        "{NewLine}╔─{Timestamp:HH:mm:ss} [{Level:u4}] ({SourceContext}) {NewLine}╚─{Message:lj}{NewLine}{Exception}")
                 .WriteTo.File(
                     path: "logs/llmgateway-.log",
                     rollingInterval: RollingInterval.Day,
@@ -36,7 +36,7 @@ public class Program
                     rollOnFileSizeLimit: true,
                     shared: true,
                     outputTemplate:
-                        "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u3}] {Message:lj}{NewLine}{Exception}");
+                        "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} {Level:u4} {Message:lj}{NewLine}{Exception}");
         });
 
         // JSON serialization (source-generated)
