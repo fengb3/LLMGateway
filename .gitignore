@@ -483,4 +483,5 @@ $RECYCLE.BIN/
 .gitignore
 
 src/LLMGateway/gateway.db
+src/LLMGateway/appsettings.json
 .claude/settings.local.json
