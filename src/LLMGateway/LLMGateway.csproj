@@ -8,6 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="LLMGateway.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\LLMGateway.Data\LLMGateway.Data.csproj" />
     <ProjectReference Include="..\LLMGateway.Models\LLMGateway.Models.csproj" />
   </ItemGroup>

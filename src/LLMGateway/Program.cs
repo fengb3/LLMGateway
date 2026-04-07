@@ -8,7 +8,6 @@ using LLMGateway.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Serilog;
-using Serilog.Events;
 using Serilog.Sinks.SystemConsole.Themes;
 
 namespace LLMGateway;

@@ -1,6 +1,7 @@
 # LLMGateway
 
-An **ASP.NET Core** LLM gateway that accepts OpenAI-compatible requests and routes them to configured upstream providers based on model name.
+An **ASP.NET Core** LLM gateway that accepts OpenAI-compatible requests and routes them to configured upstream providers
+based on model name.
 
 ## Features
 
@@ -15,31 +16,31 @@ An **ASP.NET Core** LLM gateway that accepts OpenAI-compatible requests and rout
 
 ### Public
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| `GET` | `/health` | None | Health check |
+| Method | Path      | Auth | Description  |
+|--------|-----------|------|--------------|
+| `GET`  | `/health` | None | Health check |
 
 ### User API (requires user API key)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/v1/models` | List all configured models |
+| Method | Path                   | Description                                  |
+|--------|------------------------|----------------------------------------------|
+| `GET`  | `/v1/models`           | List all configured models                   |
 | `POST` | `/v1/chat/completions` | Chat completions (streaming & non-streaming) |
 
 ### Admin API (requires admin API key)
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/admin/providers` | List all providers |
-| `GET` | `/admin/providers/{id}` | Get a provider |
-| `POST` | `/admin/providers` | Create a provider |
-| `PUT` | `/admin/providers/{id}` | Update a provider |
-| `DELETE` | `/admin/providers/{id}` | Delete a provider |
-| `GET` | `/admin/apikeys` | List all user API keys |
-| `GET` | `/admin/apikeys/{id}` | Get an API key |
-| `POST` | `/admin/apikeys` | Generate a new user API key |
-| `PUT` | `/admin/apikeys/{id}` | Update an API key (name/active/expiry) |
-| `DELETE` | `/admin/apikeys/{id}` | Delete an API key |
+| Method   | Path                    | Description                            |
+|----------|-------------------------|----------------------------------------|
+| `GET`    | `/admin/providers`      | List all providers                     |
+| `GET`    | `/admin/providers/{id}` | Get a provider                         |
+| `POST`   | `/admin/providers`      | Create a provider                      |
+| `PUT`    | `/admin/providers/{id}` | Update a provider                      |
+| `DELETE` | `/admin/providers/{id}` | Delete a provider                      |
+| `GET`    | `/admin/apikeys`        | List all user API keys                 |
+| `GET`    | `/admin/apikeys/{id}`   | Get an API key                         |
+| `POST`   | `/admin/apikeys`        | Generate a new user API key            |
+| `PUT`    | `/admin/apikeys/{id}`   | Update an API key (name/active/expiry) |
+| `DELETE` | `/admin/apikeys/{id}`   | Delete an API key                      |
 
 ## Configuration
 
@@ -68,9 +69,12 @@ Edit `appsettings.json` (or use environment variables / user secrets):
 }
 ```
 
-- **Providers** are seeded into the database on first run (if the table is empty) and can then be managed via the admin API.
-- **AdminApiKeys** are used to authenticate `/admin/*` requests. Configure them in `appsettings.json` or via environment variables.
-- **User API keys** are managed entirely through the admin API (`POST /admin/apikeys`). The plaintext key is returned only once at creation time.
+- **Providers** are seeded into the database on first run (if the table is empty) and can then be managed via the admin
+  API.
+- **AdminApiKeys** are used to authenticate `/admin/*` requests. Configure them in `appsettings.json` or via environment
+  variables.
+- **User API keys** are managed entirely through the admin API (`POST /admin/apikeys`). The plaintext key is returned
+  only once at creation time.
 
 ## Running
 

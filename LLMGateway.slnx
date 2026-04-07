@@ -4,4 +4,7 @@
     <Project Path="src/LLMGateway.Models/LLMGateway.Models.csproj" />
     <Project Path="src/LLMGateway/LLMGateway.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LLMGateway.Tests/LLMGateway.Tests.csproj" />
+  </Folder>
 </Solution>
