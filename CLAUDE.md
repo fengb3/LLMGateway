@@ -13,19 +13,26 @@ dotnet run --project src/LLMGateway
 
 # Run with watch for hot reload during development
 dotnet watch --project src/LLMGateway
+
+# Run all tests
+dotnet test tests/LLMGateway.Tests
+
+# Run a specific test class
+dotnet test tests/LLMGateway.Tests --filter "FullyQualifiedName~AnthropicOpenAIConverterTests"
 ```
 
-There are no test projects in this solution currently.
+The test project uses xUnit + Moq + FluentAssertions.
 
 ## Architecture
 
 This is an ASP.NET Core 9.0 LLM gateway that proxies requests to upstream providers. It uses **minimal APIs** (not controllers).
 
-### Three-Project Solution
+### Four-Project Solution
 
 - **`src/LLMGateway`** – Web host. Contains endpoints, middleware, services, and `Program.cs` wiring. This is the startup project.
-- **`src/LLMGateway.Data`** – Data access layer with EF Core (SQLite). Entities, repositories, migrations, `AppDbContext`.
+- **`src/LLMGateway.Data`** – Data access layer with EF Core (SQLite). Entities, repositories, `AppDbContext`.
 - **`src/LLMGateway.Models`** – Pure DTOs for admin, OpenAI-compatible, and Anthropic-compatible APIs. No dependencies on other projects.
+- **`tests/LLMGateway.Tests`** – Unit tests covering converters, routing, middleware, data layer, and proxy service.
 
 ### Request Flow
 
@@ -61,7 +68,7 @@ Each endpoint group is defined as a static class with a `Map*Endpoints(this WebA
 
 ### JSON Serialization
 
-Uses source-generated JSON via `AppJsonSerializerContext` for performance. New DTOs added to `LLMGateway.Models` may need to be registered there.
+Uses source-generated JSON via `AppJsonSerializerContext` for performance. New DTOs added to `LLMGateway.Models` may need to be registered there. It is `internal` — `LLMGateway.Tests` has access via `InternalsVisibleTo`.
 
 ## Code Style
 

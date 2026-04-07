@@ -1,16 +1,15 @@
 # LLMGateway
 
-An **ASP.NET Core** LLM gateway that accepts OpenAI-compatible requests and routes them to configured upstream providers
-based on model name.
+An **ASP.NET Core** LLM gateway that accepts both **OpenAI** and **Anthropic** compatible requests and routes them to configured upstream providers based on model name.
 
 ## Features
 
 - **Model-based routing** – map any model name to any OpenAI-compatible provider
+- **Dual API compatibility** – OpenAI (`/v1/chat/completions`) and Anthropic (`/v1/messages`) formats, with automatic conversion
 - **Dual API key authentication** – admin keys (config-based) and user keys (DB-managed)
 - **Dynamic API key management** – generate / revoke user API keys via the admin API
-- **Streaming support** – server-sent events (SSE) proxied transparently
-- **OpenAI-compatible API** – drop-in replacement for the OpenAI endpoint
-- **Multi-project architecture** – separated into Data, Models, and Web layers
+- **Streaming support** – server-sent events (SSE) proxied transparently for both API formats
+- **Multi-project architecture** – separated into Web, Data, Models, and Tests layers
 
 ## Endpoints
 
@@ -22,10 +21,11 @@ based on model name.
 
 ### User API (requires user API key)
 
-| Method | Path                   | Description                                  |
-|--------|------------------------|----------------------------------------------|
-| `GET`  | `/v1/models`           | List all configured models                   |
-| `POST` | `/v1/chat/completions` | Chat completions (streaming & non-streaming) |
+| Method | Path                   | Description                                              |
+|--------|------------------------|----------------------------------------------------------|
+| `GET`  | `/v1/models`           | List all configured models                               |
+| `POST` | `/v1/chat/completions` | OpenAI-compatible chat completions (streaming & non-streaming) |
+| `POST` | `/v1/messages`         | Anthropic-compatible messages API (streaming & non-streaming) |
 
 ### Admin API (requires admin API key)
 
@@ -69,12 +69,9 @@ Edit `appsettings.json` (or use environment variables / user secrets):
 }
 ```
 
-- **Providers** are seeded into the database on first run (if the table is empty) and can then be managed via the admin
-  API.
-- **AdminApiKeys** are used to authenticate `/admin/*` requests. Configure them in `appsettings.json` or via environment
-  variables.
-- **User API keys** are managed entirely through the admin API (`POST /admin/apikeys`). The plaintext key is returned
-  only once at creation time.
+- **Providers** are seeded into the database on first run (if the table is empty) and can then be managed via the admin API.
+- **AdminApiKeys** are used to authenticate `/admin/*` requests. Configure them in `appsettings.json` or via environment variables.
+- **User API keys** are managed entirely through the admin API (`POST /admin/apikeys`). The plaintext key is returned only once at creation time.
 
 ## Running
 
@@ -84,6 +81,22 @@ dotnet run
 ```
 
 The server starts at `http://localhost:5273` by default.
+
+## Testing
+
+```bash
+# Run all tests
+dotnet test tests/LLMGateway.Tests
+
+# Run with verbose output
+dotnet test tests/LLMGateway.Tests --verbosity normal
+```
+
+The test project uses **xUnit**, **Moq**, and **FluentAssertions**. It includes:
+- Unit tests for the Anthropic↔OpenAI format converters
+- Unit tests for `ProviderRouter` and `ProxyService`
+- Middleware tests for API key authentication
+- SQLite in-memory integration tests for repositories
 
 ## Quick Start
 
@@ -99,7 +112,7 @@ curl -X POST http://localhost:5273/admin/apikeys \
 curl http://localhost:5273/v1/models \
   -H "Authorization: Bearer sk-gw-YOUR_KEY"
 
-# 3. Chat completion
+# 3. OpenAI-compatible chat completion
 curl http://localhost:5273/v1/chat/completions \
   -H "Authorization: Bearer sk-gw-YOUR_KEY" \
   -H "Content-Type: application/json" \
@@ -108,7 +121,18 @@ curl http://localhost:5273/v1/chat/completions \
     "messages": [{"role": "user", "content": "Hello!"}]
   }'
 
-# 4. Streaming chat completion
+# 4. Anthropic-compatible messages
+curl http://localhost:5273/v1/messages \
+  -H "Authorization: Bearer sk-gw-YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -H "anthropic-version: 2023-06-01" \
+  -d '{
+    "model": "deepseek-chat",
+    "max_tokens": 1024,
+    "messages": [{"role": "user", "content": "Hello!"}]
+  }'
+
+# 5. Streaming chat completion (OpenAI)
 curl http://localhost:5273/v1/chat/completions \
   -H "Authorization: Bearer sk-gw-YOUR_KEY" \
   -H "Content-Type: application/json" \
@@ -124,7 +148,7 @@ curl http://localhost:5273/v1/chat/completions \
 ```
 LLMGateway.slnx
 src/
-  LLMGateway.Data/                # Database layer (class library)
+  LLMGateway.Data/                # Database layer (EF Core / SQLite)
     Entities/
       ProviderEntity.cs
       ApiKeyEntity.cs
@@ -133,11 +157,10 @@ src/
       SqliteProviderRepository.cs
       IApiKeyRepository.cs
       SqliteApiKeyRepository.cs
-    Migrations/
     AppDbContext.cs
     DatabaseInitializer.cs
 
-  LLMGateway.Models/              # Request/Response DTOs (class library)
+  LLMGateway.Models/              # Request/Response DTOs
     Admin/
       CreateProviderRequest.cs
       UpdateProviderRequest.cs
@@ -151,6 +174,15 @@ src/
       ChatCompletionResponse.cs
       ErrorResponse.cs
       ModelListResponse.cs
+      OpenAITool.cs
+      OpenAIToolCall.cs
+    Anthropic/
+      AnthropicMessagesRequest.cs
+      AnthropicMessagesResponse.cs
+      AnthropicContentBlocks.cs
+      AnthropicSseEvents.cs
+      AnthropicTool.cs
+      AnthropicErrorResponse.cs
     HealthResponse.cs
 
   LLMGateway/                     # Web host (ASP.NET Core)
@@ -162,13 +194,30 @@ src/
       AdminApiKeyEndpoints.cs
       ChatCompletionEndpoints.cs
       ModelEndpoints.cs
+      AnthropicMessagesEndpoints.cs
     Middleware/
       ApiKeyMiddleware.cs
     Services/
       IProviderRouter.cs
       ProviderRouter.cs
       ProxyService.cs
+      AnthropicOpenAIConverter.cs
+      AnthropicSseConverter.cs
     AppJsonSerializerContext.cs
     Program.cs
     appsettings.json
+
+tests/
+  LLMGateway.Tests/               # Unit & integration tests
+    Services/
+      AnthropicOpenAIConverterTests.cs
+      AnthropicSseConverterTests.cs
+      ProviderRouterTests.cs
+      ProxyServiceTests.cs
+    Middleware/
+      ApiKeyMiddlewareTests.cs
+    Data/
+      SqliteTestBase.cs
+      SqliteProviderRepositoryTests.cs
+      SqliteApiKeyRepositoryTests.cs
 ```
