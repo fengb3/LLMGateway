@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <!-- Container settings for dotnet publish -t:PublishContainer -->
+    <ContainerRepository>llmgateway</ContainerRepository>
+    <ContainerImageTags>latest;$(Version)</ContainerImageTags>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,5 +28,4 @@
     <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageReference Include="Serilog.Sinks.File" Version="7.0.0" />
   </ItemGroup>
-
 </Project>
